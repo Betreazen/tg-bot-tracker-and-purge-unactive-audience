@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: tg_bot_postgres
+    environment:
+      POSTGRES_DB: tg_bot_db
+      POSTGRES_USER: tg_bot_user
+      POSTGRES_PASSWORD: tg_bot_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - tg_bot_network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: tg_bot_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - tg_bot_network
+    restart: unless-stopped
+
+  bot:
+    build: .
+    container_name: tg_bot_app
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - tg_bot_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  tg_bot_network:
+    driver: bridge

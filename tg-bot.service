@@ -1,0 +1,20 @@
+[Unit]
+Description=Telegram Bot for Channel Audience Collection
+After=network.target postgresql.service redis.service
+
+[Service]
+Type=simple
+User=your_user
+Group=your_group
+WorkingDirectory=/path/to/tg-bot-tracker-and-purge-unactive-audience
+Environment="PATH=/path/to/tg-bot-tracker-and-purge-unactive-audience/venv/bin"
+ExecStart=/path/to/tg-bot-tracker-and-purge-unactive-audience/venv/bin/python bot.py
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=append:/path/to/tg-bot-tracker-and-purge-unactive-audience/logs/systemd.log
+StandardError=append:/path/to/tg-bot-tracker-and-purge-unactive-audience/logs/systemd-error.log
+
+[Install]
+WantedBy=multi-user.target
