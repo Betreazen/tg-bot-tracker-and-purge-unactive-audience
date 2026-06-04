@@ -9,7 +9,6 @@ import tempfile
 from app.database.connection import get_db
 from app.services.user_service import UserService
 from app.utils.texts import get_texts
-from app.utils.redis_storage import get_redis
 from app.utils.config import get_config
 
 logger = logging.getLogger(__name__)
@@ -33,11 +32,7 @@ def get_admin_menu_keyboard() -> InlineKeyboardMarkup:
 async def cmd_admin(message: Message):
     """Show admin menu"""
     texts = get_texts()
-    redis = get_redis()
     user_id = message.from_user.id
-    
-    # Update session
-    await redis.update_session(user_id)
     
     await message.answer(
         texts.get_admin_text("menu_title"),
@@ -50,16 +45,7 @@ async def cmd_admin(message: Message):
 async def show_admin_menu(callback: CallbackQuery):
     """Show admin menu"""
     texts = get_texts()
-    redis = get_redis()
     user_id = callback.from_user.id
-    
-    # Check session
-    if not await redis.check_session(user_id):
-        await callback.answer(texts.get_admin_text("session_expired"), show_alert=True)
-        return
-    
-    # Update session
-    await redis.update_session(user_id)
     
     await callback.message.edit_text(
         texts.get_admin_text("menu_title"),
@@ -71,11 +57,7 @@ async def show_admin_menu(callback: CallbackQuery):
 @admin_router.callback_query(F.data == "admin_close")
 async def close_admin_menu(callback: CallbackQuery):
     """Close admin menu"""
-    redis = get_redis()
     user_id = callback.from_user.id
-    
-    # Clear session
-    await redis.clear_session(user_id)
     
     await callback.message.delete()
     await callback.answer()
@@ -86,16 +68,7 @@ async def close_admin_menu(callback: CallbackQuery):
 async def show_statistics(callback: CallbackQuery):
     """Show statistics"""
     texts = get_texts()
-    redis = get_redis()
     user_id = callback.from_user.id
-    
-    # Check session
-    if not await redis.check_session(user_id):
-        await callback.answer(texts.get_admin_text("session_expired"), show_alert=True)
-        return
-    
-    # Update session
-    await redis.update_session(user_id)
     
     # Get statistics
     db = get_db()
@@ -123,17 +96,8 @@ async def show_statistics(callback: CallbackQuery):
 async def export_users(callback: CallbackQuery):
     """Export users to file"""
     texts = get_texts()
-    redis = get_redis()
     config = get_config()
     user_id = callback.from_user.id
-    
-    # Check session
-    if not await redis.check_session(user_id):
-        await callback.answer(texts.get_admin_text("session_expired"), show_alert=True)
-        return
-    
-    # Update session
-    await redis.update_session(user_id)
     
     await callback.answer(texts.get_export_text("generating"))
     
