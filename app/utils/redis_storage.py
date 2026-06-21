@@ -31,63 +31,10 @@ class RedisStorage:
         await self.redis.aclose()
         await self.pool.disconnect()
         logger.info("Redis connection closed")
-    
-    # FSM State Management
-    async def set_state(self, user_id: int, state: str, ttl: int = 3600) -> bool:
-        """
-        Set FSM state for user
-        
-        Args:
-            user_id: User ID
-            state: State name
-            ttl: Time to live in seconds (default 1 hour)
-            
-        Returns:
-            True if successful
-        """
-        try:
-            key = self._key("fsm:state", user_id)
-            await self.redis.setex(key, ttl, state)
-            return True
-        except Exception as e:
-            logger.error(f"Error setting FSM state: {e}")
-            return False
-    
-    async def get_state(self, user_id: int) -> Optional[str]:
-        """
-        Get FSM state for user
-        
-        Args:
-            user_id: User ID
-            
-        Returns:
-            State name or None
-        """
-        try:
-            key = self._key("fsm:state", user_id)
-            return await self.redis.get(key)
-        except Exception as e:
-            logger.error(f"Error getting FSM state: {e}")
-            return None
-    
-    async def clear_state(self, user_id: int) -> bool:
-        """
-        Clear FSM state for user
-        
-        Args:
-            user_id: User ID
-            
-        Returns:
-            True if successful
-        """
-        try:
-            key = self._key("fsm:state", user_id)
-            await self.redis.delete(key)
-            return True
-        except Exception as e:
-            logger.error(f"Error clearing FSM state: {e}")
-            return False
-    
+
+    # FSM-состояниями управляет aiogram через свой RedisStorage; здесь храним
+    # только черновики постов, кэш подписки и произвольные ключи.
+
     # Post Draft Management
     async def save_post_draft(self, user_id: int, data: dict, ttl: int = 3600) -> bool:
         """
@@ -170,6 +117,25 @@ class RedisStorage:
         except Exception as e:
             logger.error(f"Error writing subscription cache: {e}")
             return False
+
+    # Anti-flood: фиксированное окно через INCR + EXPIRE
+    async def register_event(self, user_id: int, window: int) -> int:
+        """
+        Зарегистрировать событие пользователя и вернуть число событий в текущем окне.
+
+        Returns:
+            Текущий счётчик за окно (>= 1). При ошибке Redis возвращает 0,
+            чтобы троттлинг не блокировал пользователей при сбое.
+        """
+        try:
+            key = self._key("throttle", user_id)
+            count = await self.redis.incr(key)
+            if count == 1:
+                await self.redis.expire(key, window)
+            return count
+        except Exception as e:
+            logger.error(f"Error registering throttle event: {e}")
+            return 0
     
     # Generic key-value operations
     async def set(self, key: str, value: Any, ttl: Optional[int] = None) -> bool:

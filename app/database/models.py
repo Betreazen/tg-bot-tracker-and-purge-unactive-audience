@@ -35,6 +35,8 @@ class ScheduledPost(Base):
     scheduled_time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.now)
     published: Mapped[bool] = mapped_column(nullable=False, default=False)
+    # Счётчик неудачных попыток публикации (для ограниченного ретрая)
+    attempts: Mapped[int] = mapped_column(nullable=False, default=0)
 
     # Индекс под основной запрос шедулера: WHERE published = false AND scheduled_time <= now
     __table_args__ = (

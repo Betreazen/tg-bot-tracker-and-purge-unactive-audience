@@ -37,12 +37,23 @@ class Database:
             expire_on_commit=False
         )
         
+    # Идемпотентные миграции: create_all НЕ добавляет новые колонки/индексы к уже
+    # существующим таблицам, поэтому применяем их вручную (безопасно на любой БД).
+    _MIGRATIONS = (
+        "ALTER TABLE scheduled_posts ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0",
+        "CREATE INDEX IF NOT EXISTS ix_users_username ON users (username)",
+        "CREATE INDEX IF NOT EXISTS ix_scheduled_posts_published_time "
+        "ON scheduled_posts (published, scheduled_time)",
+    )
+
     async def create_tables(self):
-        """Create all tables in the database"""
+        """Create all tables and apply idempotent migrations"""
         try:
             async with self.engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
-            logger.info("Database tables created successfully")
+                for statement in self._MIGRATIONS:
+                    await conn.execute(text(statement))
+            logger.info("Database tables created and migrations applied")
         except Exception as e:
             logger.error(f"Error creating database tables: {e}")
             raise

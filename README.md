@@ -12,7 +12,7 @@ A Telegram bot designed to verify active real users of a Telegram channel and ge
 - ✅ User export to .txt file
 - ✅ Support for text, photo, video, and GIF posts
 - ✅ Automatic scheduled post publishing
-- ✅ Session management with timeout
+- ✅ Anti-flood protection for user messages
 
 ## Technology Stack
 
@@ -415,7 +415,7 @@ docker-compose restart bot
 - No public API endpoints
 - Database credentials in environment variables
 - Bot token secured in `.env` file
-- Session timeout for admin panel (10 minutes)
+- Admin actions restricted by `ADMIN_IDS` whitelist via middleware
 
 ---
 

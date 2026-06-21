@@ -14,6 +14,10 @@ from app.handlers.post_handlers import publish_post
 
 logger = logging.getLogger(__name__)
 
+# Максимум попыток публикации перед тем, как пост будет помечен как проваленный.
+# Защищает от вечного ретрая, но переживает временные сбои Telegram.
+MAX_PUBLISH_ATTEMPTS = 3
+
 
 class SchedulerService:
     """Service for checking and publishing scheduled posts"""
@@ -92,16 +96,16 @@ class SchedulerService:
                         "text": post.text,
                         "file_id": post.file_id
                     }
-                    
+
                     # Publish post
                     success = await publish_post(self.bot, config.CHANNEL_ID, post_data, texts)
-                    
+
                     if success:
                         # Mark as published
                         post.published = True
                         await session.commit()
                         logger.info(f"Published scheduled post {post.id}")
-                        
+
                         # Notify admin
                         try:
                             await self.bot.send_message(
@@ -111,21 +115,33 @@ class SchedulerService:
                         except Exception as e:
                             logger.error(f"Error notifying admin {post.admin_id}: {e}")
                     else:
-                        logger.error(f"Failed to publish scheduled post {post.id}")
-                        
-                        # Notify admin about failure
-                        try:
-                            await self.bot.send_message(
-                                post.admin_id,
-                                texts.get_publication_text("published_error", error="Publication failed")
+                        # Неудача: считаем попытки. Временный сбой Telegram → повторим
+                        # на следующем тике; только после MAX попыток сдаёмся.
+                        post.attempts += 1
+                        if post.attempts >= MAX_PUBLISH_ATTEMPTS:
+                            post.published = True  # больше не пытаемся
+                            await session.commit()
+                            logger.error(
+                                f"Giving up on scheduled post {post.id} after "
+                                f"{post.attempts} attempts"
                             )
-                        except Exception as e:
-                            logger.error(f"Error notifying admin {post.admin_id}: {e}")
-                        
-                        # Mark as published to avoid retrying
-                        post.published = True
-                        await session.commit()
-                        
+                            try:
+                                await self.bot.send_message(
+                                    post.admin_id,
+                                    texts.get_publication_text(
+                                        "published_error",
+                                        error=f"Publication failed after {post.attempts} attempts",
+                                    ),
+                                )
+                            except Exception as e:
+                                logger.error(f"Error notifying admin {post.admin_id}: {e}")
+                        else:
+                            await session.commit()
+                            logger.warning(
+                                f"Failed to publish post {post.id}, "
+                                f"attempt {post.attempts}/{MAX_PUBLISH_ATTEMPTS}, will retry"
+                            )
+
                 except Exception as e:
                     logger.error(f"Error publishing scheduled post {post.id}: {e}")
                     await session.rollback()

@@ -135,6 +135,7 @@ logs/*.log
 exports/
 *.txt
 !requirements.txt
+!requirements-dev.txt
 !logs/.gitkeep
 
 # Docker

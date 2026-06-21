@@ -21,6 +21,7 @@ from app.handlers.user_handlers import user_router
 from app.handlers.admin_handlers import admin_router
 from app.handlers.post_handlers import post_router
 from app.middlewares.admin_middleware import AdminMiddleware
+from app.middlewares.throttling_middleware import ThrottlingMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,11 @@ def build_dispatcher(config) -> Dispatcher:
     admin_router.callback_query.middleware(AdminMiddleware())
     post_router.message.middleware(AdminMiddleware())
     post_router.callback_query.middleware(AdminMiddleware())
+
+    # Anti-flood только для обычных пользователей (админов не троттлим)
+    throttling = ThrottlingMiddleware(limit=5, window=3)
+    user_router.message.middleware(throttling)
+    user_router.callback_query.middleware(throttling)
 
     dp.include_router(admin_router)
     dp.include_router(post_router)

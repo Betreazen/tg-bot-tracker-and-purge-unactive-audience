@@ -67,8 +67,7 @@ tg-bot-tracker-and-purge-unactive-audience/
   - Statistics
   - Export Users
   - Close
-- [x] Admin middleware for authorization
-- [x] Session management with 10-minute timeout
+- [x] Admin middleware for authorization (ADMIN_IDS whitelist)
 - [x] Back button navigation
 
 ### 3. Statistics ✅
@@ -122,9 +121,9 @@ tg-bot-tracker-and-purge-unactive-audience/
 - [x] Connection pooling
 
 ### 10. Redis ✅
-- [x] FSM state storage (aiogram integration)
+- [x] FSM state storage (aiogram integration, namespaced per bot)
 - [x] Post draft storage
-- [x] Session timeout tracking
+- [x] Subscription check caching
 - [x] Generic key-value operations
 
 ### 11. Configuration ✅
@@ -254,7 +253,6 @@ python bot.py
 - [ ] Admin sends `/admin` → menu appears
 - [ ] Click Statistics → shows user count
 - [ ] Click Export → receives .txt file
-- [ ] Session expires after 10 minutes
 
 ### Post Creation
 - [ ] Click Create Post → awaits content
@@ -384,11 +382,11 @@ sudo systemctl restart tg-bot
 
 ## 📈 Performance Considerations
 
-- **Database**: Connection pooling with NullPool for async
-- **Redis**: Used for FSM and caching, not for heavy data
+- **Database**: Bounded async connection pool with pre-ping and recycle
+- **Redis**: Used for FSM, subscription cache and drafts, not for heavy data
 - **Scheduler**: Checks every 60 seconds (configurable)
 - **Logging**: File rotation at 10MB with 5 backups
-- **Sessions**: Auto-expire after 10 minutes
+- **Subscription checks**: Cached in Redis to limit Telegram API calls
 
 ---
 
@@ -397,7 +395,7 @@ sudo systemctl restart tg-bot
 - Admin access via ADMIN_IDS only
 - Environment variables for sensitive data
 - No public API endpoints
-- Session timeout for admin panel
+- Anti-flood throttling for user messages
 - Comprehensive logging for auditing
 
 ---
