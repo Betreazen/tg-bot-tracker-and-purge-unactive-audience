@@ -7,21 +7,28 @@ logger = logging.getLogger(__name__)
 
 
 class RedisStorage:
-    """Redis storage for FSM and post drafts"""
-    
-    def __init__(self, redis_url: str):
+    """Redis storage for post drafts, subscription cache and FSM helpers"""
+
+    def __init__(self, redis_url: str, namespace: str = "tg_bot"):
         """
         Initialize Redis connection
-        
+
         Args:
             redis_url: Redis connection string (redis://...)
+            namespace: Префикс ключей этого бота. Изолирует данные ботов даже
+                при общем Redis (например, namespace = bot id).
         """
         self.pool = ConnectionPool.from_url(redis_url, decode_responses=True)
         self.redis = Redis(connection_pool=self.pool)
-        
+        self.namespace = namespace
+
+    def _key(self, *parts) -> str:
+        """Build namespaced Redis key."""
+        return ":".join([self.namespace, *map(str, parts)])
+
     async def close(self):
         """Close Redis connection"""
-        await self.redis.close()
+        await self.redis.aclose()
         await self.pool.disconnect()
         logger.info("Redis connection closed")
     
@@ -39,7 +46,7 @@ class RedisStorage:
             True if successful
         """
         try:
-            key = f"fsm:state:{user_id}"
+            key = self._key("fsm:state", user_id)
             await self.redis.setex(key, ttl, state)
             return True
         except Exception as e:
@@ -57,7 +64,7 @@ class RedisStorage:
             State name or None
         """
         try:
-            key = f"fsm:state:{user_id}"
+            key = self._key("fsm:state", user_id)
             return await self.redis.get(key)
         except Exception as e:
             logger.error(f"Error getting FSM state: {e}")
@@ -74,7 +81,7 @@ class RedisStorage:
             True if successful
         """
         try:
-            key = f"fsm:state:{user_id}"
+            key = self._key("fsm:state", user_id)
             await self.redis.delete(key)
             return True
         except Exception as e:
@@ -95,7 +102,7 @@ class RedisStorage:
             True if successful
         """
         try:
-            key = f"post:draft:{user_id}"
+            key = self._key("post:draft", user_id)
             await self.redis.setex(key, ttl, json.dumps(data))
             return True
         except Exception as e:
@@ -113,7 +120,7 @@ class RedisStorage:
             Draft data dictionary or None
         """
         try:
-            key = f"post:draft:{user_id}"
+            key = self._key("post:draft", user_id)
             data = await self.redis.get(key)
             return json.loads(data) if data else None
         except Exception as e:
@@ -131,11 +138,37 @@ class RedisStorage:
             True if successful
         """
         try:
-            key = f"post:draft:{user_id}"
+            key = self._key("post:draft", user_id)
             await self.redis.delete(key)
             return True
         except Exception as e:
             logger.error(f"Error clearing post draft: {e}")
+            return False
+
+    # Subscription cache — снижает число запросов get_chat_member к Telegram
+    async def get_cached_subscription(self, user_id: int) -> Optional[bool]:
+        """
+        Получить закэшированный результат проверки подписки.
+
+        Returns:
+            True/False если в кэше, иначе None (нужно проверять заново).
+        """
+        try:
+            value = await self.redis.get(self._key("sub", user_id))
+            if value is None:
+                return None
+            return value == "1"
+        except Exception as e:
+            logger.error(f"Error reading subscription cache: {e}")
+            return None
+
+    async def set_cached_subscription(self, user_id: int, subscribed: bool, ttl: int = 300) -> bool:
+        """Сохранить результат проверки подписки (по умолчанию на 5 минут)."""
+        try:
+            await self.redis.setex(self._key("sub", user_id), ttl, "1" if subscribed else "0")
+            return True
+        except Exception as e:
+            logger.error(f"Error writing subscription cache: {e}")
             return False
     
     # Generic key-value operations
@@ -153,10 +186,11 @@ class RedisStorage:
         """
         try:
             data = json.dumps(value) if isinstance(value, (dict, list)) else str(value)
+            nkey = self._key(key)
             if ttl:
-                await self.redis.setex(key, ttl, data)
+                await self.redis.setex(nkey, ttl, data)
             else:
-                await self.redis.set(key, data)
+                await self.redis.set(nkey, data)
             return True
         except Exception as e:
             logger.error(f"Error setting key {key}: {e}")
@@ -173,7 +207,7 @@ class RedisStorage:
             Value or None
         """
         try:
-            return await self.redis.get(key)
+            return await self.redis.get(self._key(key))
         except Exception as e:
             logger.error(f"Error getting key {key}: {e}")
             return None
@@ -189,7 +223,7 @@ class RedisStorage:
             True if successful
         """
         try:
-            await self.redis.delete(key)
+            await self.redis.delete(self._key(key))
             return True
         except Exception as e:
             logger.error(f"Error deleting key {key}: {e}")
@@ -200,19 +234,20 @@ class RedisStorage:
 redis_storage: RedisStorage | None = None
 
 
-async def init_redis(redis_url: str) -> RedisStorage:
+async def init_redis(redis_url: str, namespace: str = "tg_bot") -> RedisStorage:
     """
     Initialize Redis connection
-    
+
     Args:
         redis_url: Redis connection string
-        
+        namespace: Префикс ключей бота (например, его bot id)
+
     Returns:
         RedisStorage instance
     """
     global redis_storage
-    redis_storage = RedisStorage(redis_url)
-    logger.info("Redis connection initialized")
+    redis_storage = RedisStorage(redis_url, namespace=namespace)
+    logger.info(f"Redis connection initialized (namespace={namespace})")
     return redis_storage
 
 

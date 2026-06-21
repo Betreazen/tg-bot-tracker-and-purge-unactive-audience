@@ -1,42 +1,60 @@
+# Запуск нескольких ботов:
+#   Каждый бот — отдельный Compose-проект. Задайте уникальный COMPOSE_PROJECT_NAME
+#   в .env (например, COMPOSE_PROJECT_NAME=bot_alpha). Compose автоматически
+#   добавит этот префикс к именам контейнеров, томов и сети, поэтому разные боты
+#   не конфликтуют. Порты Postgres/Redis НЕ публикуются на хост — бот ходит к ним
+#   по внутренней сети, благодаря чему несколько стеков спокойно живут на одном сервере.
+
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: tg_bot_postgres
     environment:
-      POSTGRES_DB: tg_bot_db
-      POSTGRES_USER: tg_bot_user
-      POSTGRES_PASSWORD: tg_bot_password
+      POSTGRES_DB: ${POSTGRES_DB:-tg_bot_db}
+      POSTGRES_USER: ${POSTGRES_USER:-tg_bot_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tg_bot_password}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    # Порт на хост намеренно НЕ публикуется (изоляция нескольких ботов).
+    # Для локальной отладки используйте docker-compose.override.yml (см. .example).
     networks:
-      - tg_bot_network
+      - bot_network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tg_bot_user} -d ${POSTGRES_DB:-tg_bot_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   redis:
     image: redis:7-alpine
-    container_name: tg_bot_redis
-    ports:
-      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis_data:/data
+    # Порт на хост намеренно не публикуется (см. комментарий у postgres).
     networks:
-      - tg_bot_network
+      - bot_network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
 
   bot:
     build: .
-    container_name: tg_bot_app
     env_file:
       - .env
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     volumes:
       - ./logs:/app/logs
     networks:
-      - tg_bot_network
+      - bot_network
     restart: unless-stopped
 
 volumes:
@@ -44,5 +62,5 @@ volumes:
   redis_data:
 
 networks:
-  tg_bot_network:
+  bot_network:
     driver: bridge

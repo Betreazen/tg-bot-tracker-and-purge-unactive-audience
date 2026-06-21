@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import BigInteger, String, DateTime, Text
+from sqlalchemy import BigInteger, String, DateTime, Text, Index
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -13,7 +13,7 @@ class User(Base):
     __tablename__ = "users"
 
     user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, unique=True)
-    username: Mapped[str | None] = mapped_column(Text, nullable=True)
+    username: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
     first_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     first_seen_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
@@ -35,6 +35,11 @@ class ScheduledPost(Base):
     scheduled_time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.now)
     published: Mapped[bool] = mapped_column(nullable=False, default=False)
+
+    # Индекс под основной запрос шедулера: WHERE published = false AND scheduled_time <= now
+    __table_args__ = (
+        Index("ix_scheduled_posts_published_time", "published", "scheduled_time"),
+    )
 
     def __repr__(self) -> str:
         return f"<ScheduledPost(id={self.id}, scheduled_time={self.scheduled_time})>"

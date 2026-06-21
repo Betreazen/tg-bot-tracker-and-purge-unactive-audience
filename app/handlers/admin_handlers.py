@@ -110,35 +110,40 @@ async def export_users(callback: CallbackQuery):
         await callback.message.answer(texts.get_export_text("no_users"))
         return
     
+    temp_path = None
     try:
         # Generate timestamp for filename
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
         filename = f"users_export_{timestamp}.txt"
-        
+
         # Create temporary file
         with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', delete=False, suffix='.txt') as f:
             temp_path = f.name
             for user in users:
                 f.write(f"@{user.username}\n")
-        
+
         # Send file
         file = FSInputFile(temp_path, filename=filename)
         await callback.message.answer_document(
             file,
             caption=texts.get_export_text("file_caption")
         )
-        
-        # Clean up temporary file
-        os.unlink(temp_path)
-        
+
         await callback.message.answer(
             texts.get_export_text("success", count=len(users))
         )
-        
+
         logger.info(f"Admin {user_id} exported {len(users)} users")
-        
+
     except Exception as e:
         logger.error(f"Error exporting users: {e}")
         await callback.message.answer(
             texts.get_export_text("error", error=str(e))
         )
+    finally:
+        # Гарантированно удаляем temp-файл, даже если отправка не удалась
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.unlink(temp_path)
+            except OSError as e:
+                logger.warning(f"Could not remove temp file {temp_path}: {e}")

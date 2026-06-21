@@ -93,15 +93,15 @@ async def show_post_preview(message: Message, state: FSMContext, bot: Bot, post_
     texts = get_texts()
     config = get_config()
     
-    # Create inline button for bot
-    bot_info = await bot.get_me()
+    # Create inline button for bot (bot.me() кэширует результат, без лишних API-запросов)
+    bot_info = await bot.me()
     bot_button = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
             text=texts.get_button_text("open_bot"),
             url=f"https://t.me/{bot_info.username}"
         )]
     ])
-    
+
     # Send preview
     preview_message = await message.answer(texts.get_post_creation_text("preview_title"))
     
@@ -173,7 +173,9 @@ async def send_post_now(callback: CallbackQuery, state: FSMContext, bot: Bot):
     await callback.answer()
 
 
-@post_router.callback_query(F.data == "post_schedule", PostStates.preview)
+# Без фильтра состояния: используется и из preview, и как кнопка "Назад"
+# при выборе месяца, поэтому должен срабатывать в любом шаге планирования.
+@post_router.callback_query(F.data == "post_schedule")
 async def schedule_post(callback: CallbackQuery, state: FSMContext):
     """Start scheduling flow"""
     texts = get_texts()
@@ -197,7 +199,8 @@ async def schedule_post(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@post_router.callback_query(F.data.startswith("year_"), PostStates.selecting_year)
+# Без фильтра состояния: также служит кнопкой "Назад" из выбора дня.
+@post_router.callback_query(F.data.startswith("year_"))
 async def select_year(callback: CallbackQuery, state: FSMContext):
     """Select year"""
     texts = get_texts()
@@ -227,15 +230,20 @@ async def select_year(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@post_router.callback_query(F.data.startswith("month_"), PostStates.selecting_month)
+# Без фильтра состояния: также служит кнопкой "Назад" из выбора часа.
+@post_router.callback_query(F.data.startswith("month_"))
 async def select_month(callback: CallbackQuery, state: FSMContext):
     """Select month"""
     texts = get_texts()
     config = get_config()
     month = int(callback.data.split("_")[1])
-    
+
     data = await state.get_data()
     year = data.get("year")
+    if not year:
+        # Стейт устарел/очищен — просим начать планирование заново
+        await callback.answer(texts.get_error_text("unknown"), show_alert=True)
+        return
     await state.update_data(month=month)
     
     # Get days in month
@@ -280,10 +288,13 @@ async def select_day(callback: CallbackQuery, state: FSMContext):
     """Select day"""
     texts = get_texts()
     day = int(callback.data.split("_")[1])
-    
+
     data = await state.get_data()
+    if not data.get("month"):
+        await callback.answer(texts.get_error_text("unknown"), show_alert=True)
+        return
     await state.update_data(day=day)
-    
+
     # Show hours (0-23)
     hour_buttons = []
     row = []
@@ -320,7 +331,11 @@ async def select_hour(callback: CallbackQuery, state: FSMContext):
     year = data.get("year")
     month = data.get("month")
     day = data.get("day")
-    
+
+    if not (year and month and day):
+        await callback.answer(texts.get_error_text("unknown"), show_alert=True)
+        return
+
     # Create scheduled datetime
     tz = pytz.timezone(config.TIMEZONE)
     scheduled_dt = tz.localize(datetime(year, month, day, hour, 0, 0))
@@ -390,8 +405,8 @@ async def publish_post(bot: Bot, channel_id: int, post_data: dict, texts) -> boo
         True if successful
     """
     try:
-        # Get bot info for button
-        bot_info = await bot.get_me()
+        # Get bot info for button (cached via bot.me())
+        bot_info = await bot.me()
         bot_button = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(
                 text=texts.get_button_text("open_bot"),

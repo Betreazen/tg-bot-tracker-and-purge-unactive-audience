@@ -8,6 +8,7 @@ from app.database.connection import get_db
 from app.services.user_service import UserService
 from app.utils.config import get_config
 from app.utils.texts import get_texts
+from app.utils.redis_storage import get_redis
 
 logger = logging.getLogger(__name__)
 
@@ -16,28 +17,40 @@ user_router = Router()
 
 async def check_subscription(bot: Bot, user_id: int, channel_id: int, max_retries: int = 3) -> bool:
     """
-    Check if user is subscribed to the channel with retry logic
-    
+    Check if user is subscribed to the channel, with short-lived Redis cache.
+
+    Кэш (по умолчанию 5 минут) резко снижает число обращений get_chat_member
+    к Telegram, т.к. подписка проверяется на каждое сообщение пользователя.
+
     Args:
         bot: Bot instance
         user_id: User ID
         channel_id: Channel ID
         max_retries: Maximum number of retry attempts
-        
+
     Returns:
         True if user is subscribed
     """
+    redis = get_redis()
+
+    cached = await redis.get_cached_subscription(user_id)
+    if cached is not None:
+        return cached
+
     for attempt in range(max_retries):
         try:
             member = await bot.get_chat_member(chat_id=channel_id, user_id=user_id)
             # Member status can be: creator, administrator, member, restricted, left, kicked
             is_subscribed = member.status in ["creator", "administrator", "member", "restricted"]
             logger.info(f"Subscription check for user {user_id}: {is_subscribed} (status: {member.status})")
+            # Кэшируем только успешный результат; True — дольше, False — короче,
+            # чтобы только что подписавшийся пользователь не ждал долго.
+            await redis.set_cached_subscription(user_id, is_subscribed, ttl=300 if is_subscribed else 60)
             return is_subscribed
         except Exception as e:
             logger.error(f"Error checking subscription for user {user_id} (attempt {attempt + 1}/{max_retries}): {e}")
             if attempt == max_retries - 1:
-                # Last attempt failed
+                # Last attempt failed — не кэшируем, чтобы повторить позже
                 return False
     return False
 
@@ -78,23 +91,21 @@ async def cmd_start(message: Message, bot: Bot):
     db = get_db()
     async with db.get_session() as session:
         try:
-            await UserService.create_or_update_user(
+            _, created = await UserService.create_or_update_user(
                 session=session,
                 user_id=user.id,
                 username=user.username,
                 first_name=user.first_name,
                 last_name=user.last_name
             )
-            
-            # Check if this is first time user
-            existing_user = await UserService.get_user(session, user.id)
-            if existing_user and existing_user.first_seen_at == existing_user.last_seen_at:
+
+            if created:
                 # First time user
                 await message.answer(texts.get_user_text("welcome"))
             else:
                 # Returning user
                 await message.answer(texts.get_user_text("activity_confirmed"))
-                
+
         except Exception as e:
             logger.error(f"Error processing user {user.id}: {e}")
             await message.answer(texts.get_error_text("database"))

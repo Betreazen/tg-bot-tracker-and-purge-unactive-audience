@@ -1,5 +1,8 @@
 import json
+import logging
 from typing import Dict, Any
+
+logger = logging.getLogger(__name__)
 
 
 class TextManager:
@@ -28,11 +31,23 @@ class TextManager:
         """
         value = self.texts
         for key in keys:
-            value = value.get(key, {})
-        
+            if isinstance(value, dict):
+                value = value.get(key)
+            else:
+                value = None
+            if value is None:
+                break
+
         if isinstance(value, str):
-            return value.format(**kwargs) if kwargs else value
-        return str(value)
+            try:
+                return value.format(**kwargs) if kwargs else value
+            except (KeyError, IndexError) as e:
+                logger.warning(f"Text formatting failed for keys {keys}: {e}")
+                return value
+
+        # Ключ не найден или это не строка — логируем и возвращаем безопасную заглушку
+        logger.warning(f"Missing text for keys: {'.'.join(keys)}")
+        return f"[{'.'.join(keys)}]"
     
     def get_user_text(self, key: str, **kwargs) -> str:
         """Get user text"""

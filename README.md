@@ -129,6 +129,37 @@ A Telegram bot designed to verify active real users of a Telegram channel and ge
    docker-compose down
    ```
 
+### Running Multiple Bots on One Server
+
+Каждый бот запускается как **отдельный Compose-проект** с собственными
+контейнерами Postgres и Redis. Изоляция обеспечивается так:
+
+- В базовом `docker-compose.yml` **порты Postgres/Redis не публикуются** на хост,
+  поэтому конфликта портов между ботами не возникает в принципе.
+- Имена контейнеров, томов и сети автоматически берут префикс из
+  `COMPOSE_PROJECT_NAME`.
+
+Чтобы добавить второго бота:
+
+```bash
+# 1. Отдельная папка-копия проекта
+cp -r tg-bot-tracker bot_beta && cd bot_beta
+
+# 2. Свой .env c уникальными значениями
+cp .env.example .env
+#   COMPOSE_PROJECT_NAME=bot_beta      <- уникальное имя!
+#   BOT_TOKEN=...                      <- токен второго бота
+#   CHANNEL_ID=...                     <- его канал
+#   (POSTGRES_PASSWORD задайте свой)
+
+# 3. Запуск — не конфликтует с первым ботом
+docker-compose up -d
+```
+
+Если для отладки нужен прямой доступ к БД/Redis с хоста — скопируйте
+`docker-compose.override.yml.example` в `docker-compose.override.yml`
+и задайте **уникальные** порты для каждого бота.
+
 ## Configuration
 
 ### Environment Variables (.env)
@@ -341,11 +372,12 @@ For issues or questions:
 ### Backup Database
 
 ```bash
-# Using docker
-docker exec tg_bot_postgres pg_dump -U tg_bot_user tg_bot_db > backup.sql
+# Using docker compose (имена контейнеров теперь зависят от COMPOSE_PROJECT_NAME,
+# поэтому обращаемся к сервису, а не к фиксированному имени)
+docker compose exec postgres pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > backup.sql
 
 # Restore
-docker exec -i tg_bot_postgres psql -U tg_bot_user tg_bot_db < backup.sql
+docker compose exec -T postgres psql -U "$POSTGRES_USER" "$POSTGRES_DB" < backup.sql
 ```
 
 ### View Logs

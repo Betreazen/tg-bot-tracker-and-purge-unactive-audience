@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Tuple
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 import pytz
@@ -50,24 +50,25 @@ class UserService:
         username: Optional[str] = None,
         first_name: Optional[str] = None,
         last_name: Optional[str] = None
-    ) -> User:
+    ) -> Tuple[User, bool]:
         """
         Create new user or update existing user
-        
+
         Args:
             session: Database session
             user_id: User ID
             username: Username (without @)
             first_name: First name
             last_name: Last name
-            
+
         Returns:
-            User object
+            (User, created) — created=True если пользователь создан впервые
         """
         try:
             user = await UserService.get_user(session, user_id)
             current_time = UserService.get_current_time()
-            
+            created = user is None
+
             if user:
                 # Update existing user
                 user.username = username
@@ -87,9 +88,9 @@ class UserService:
                 )
                 session.add(user)
                 logger.info(f"Created new user {user_id} (username: {username})")
-            
+
             await session.commit()
-            return user
+            return user, created
         except Exception as e:
             logger.error(f"Error creating/updating user {user_id}: {e}")
             await session.rollback()
