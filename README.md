@@ -103,31 +103,26 @@ A Telegram bot designed to verify active real users of a Telegram channel and ge
 1. **Configure environment**
    ```bash
    cp .env.example .env
-   # Edit .env with your values
+   # Заполните BOT_TOKEN, CHANNEL_ID, CHANNEL_USERNAME, ADMIN_IDS
+   # Строки подключения к БД/Redis собираются автоматически — задавать не нужно.
    ```
 
-2. **Update docker-compose.yml**
-   
-   Update the database connection in `.env`:
-   ```
-   DATABASE_URL=postgresql+asyncpg://tg_bot_user:tg_bot_password@postgres:5432/tg_bot_db
-   REDIS_URL=redis://redis:6379/0
-   ```
-
-3. **Start services**
+2. **Start services**
    ```bash
-   docker-compose up -d
+   docker compose up -d --build
    ```
 
-4. **View logs**
+3. **View logs**
    ```bash
-   docker-compose logs -f bot
+   docker compose logs -f bot
    ```
 
-5. **Stop services**
+4. **Stop services**
    ```bash
-   docker-compose down
+   docker compose down
    ```
+
+> Подробная пошаговая инструкция — в [QUICKSTART.md](QUICKSTART.md).
 
 ### Running Multiple Bots on One Server
 
@@ -164,15 +159,29 @@ docker-compose up -d
 
 ### Environment Variables (.env)
 
+**Обязательные** (заполнить в `.env`):
+
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `BOT_TOKEN` | Telegram bot token from @BotFather | `123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11` |
 | `CHANNEL_ID` | Channel ID (with -100 prefix) | `-1001234567890` |
 | `CHANNEL_USERNAME` | Channel username (without @) | `my_channel` |
 | `ADMIN_IDS` | Comma-separated admin user IDs | `123456789,987654321` |
+
+**Опциональные** (есть рабочие значения по умолчанию):
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `POSTGRES_PASSWORD` | Пароль БД (рекомендуется сменить) | `tg_bot_password` |
+| `COMPOSE_PROJECT_NAME` | Уникальное имя проекта (для нескольких ботов) | `tg_bot` |
 | `TIMEZONE` | Timezone for timestamps | `Europe/Moscow` |
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql+asyncpg://user:pass@localhost:5432/db` |
-| `REDIS_URL` | Redis connection string | `redis://localhost:6379/0` |
+| `POSTGRES_DB` / `POSTGRES_USER` | Имя БД / пользователь | `tg_bot_db` / `tg_bot_user` |
+| `LOG_PATH` | Путь к лог-файлу | `logs/bot.log` |
+
+> `DATABASE_URL` и `REDIS_URL` собираются автоматически из значений выше.
+> Их можно задать явно (например, для локального запуска без Docker) — тогда
+> они переопределяют автосборку. Для локального запуска проще указать
+> `POSTGRES_HOST=localhost` и `REDIS_HOST=localhost`.
 | `LOG_PATH` | Path to log file | `logs/bot.log` |
 
 ### Getting Configuration Values

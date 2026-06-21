@@ -21,16 +21,30 @@ class Config:
         
         # Timezone
         self.TIMEZONE: str = os.getenv("TIMEZONE", "Europe/Moscow")
-        
-        # Database Configuration
-        self.DATABASE_URL: str = self._get_required("DATABASE_URL")
-        
-        # Redis Configuration
-        self.REDIS_URL: str = self._get_required("REDIS_URL")
-        
+
+        # Database: строку подключения собираем из частей (единый источник правды).
+        # Можно переопределить целиком через DATABASE_URL, если нужно.
+        self.POSTGRES_HOST: str = os.getenv("POSTGRES_HOST", "postgres")
+        self.POSTGRES_PORT: str = os.getenv("POSTGRES_PORT", "5432")
+        self.POSTGRES_DB: str = os.getenv("POSTGRES_DB", "tg_bot_db")
+        self.POSTGRES_USER: str = os.getenv("POSTGRES_USER", "tg_bot_user")
+        self.POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", "tg_bot_password")
+        self.DATABASE_URL: str = os.getenv("DATABASE_URL") or (
+            f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        )
+
+        # Redis: аналогично — собираем из частей или берём готовый REDIS_URL
+        self.REDIS_HOST: str = os.getenv("REDIS_HOST", "redis")
+        self.REDIS_PORT: str = os.getenv("REDIS_PORT", "6379")
+        self.REDIS_DB: str = os.getenv("REDIS_DB", "0")
+        self.REDIS_URL: str = os.getenv("REDIS_URL") or (
+            f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+        )
+
         # Logging
         self.LOG_PATH: str = os.getenv("LOG_PATH", "logs/bot.log")
-        
+
         logger.info("Configuration loaded successfully")
         
     def _get_required(self, key: str) -> str:
