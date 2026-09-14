@@ -429,3 +429,7 @@ docker-compose restart bot
 ---
 
 **Created with ❤️ for managing Telegram channel audiences**
+
+## Operations
+
+See [deployment, resource limits and rollback](OPERATIONS.md).
