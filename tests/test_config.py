@@ -50,3 +50,16 @@ def test_timezone_default(monkeypatch):
     _set_required(monkeypatch)
     cfg = Config()
     assert cfg.TIMEZONE == "Europe/Moscow"
+
+
+def test_database_password_with_reserved_characters(monkeypatch):
+    from sqlalchemy.engine import make_url
+
+    _set_required(monkeypatch)
+    monkeypatch.delenv("DATABASE_URL")
+    password = "test@host:/?#%secret"
+    monkeypatch.setenv("POSTGRES_PASSWORD", password)
+    cfg = Config()
+    parsed = make_url(cfg.DATABASE_URL)
+    assert parsed.password == password
+    assert parsed.host == cfg.POSTGRES_HOST

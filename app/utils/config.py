@@ -1,5 +1,6 @@
 import os
 from typing import List
+from urllib.parse import quote
 from dotenv import load_dotenv
 import logging
 
@@ -30,7 +31,7 @@ class Config:
         self.POSTGRES_USER: str = os.getenv("POSTGRES_USER", "tg_bot_user")
         self.POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", "tg_bot_password")
         self.DATABASE_URL: str = os.getenv("DATABASE_URL") or (
-            f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"postgresql+asyncpg://{quote(self.POSTGRES_USER, safe='')}:{quote(self.POSTGRES_PASSWORD, safe='')}"
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
 
